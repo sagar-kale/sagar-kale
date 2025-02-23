@@ -14,7 +14,7 @@ Here are some ideas to get you started:
 -->
 
 # 💫 About Me:
-I’m currently working on React with micro front end and Spring boot webflux <br>
+I’m currently working on React with micro front end and Spring boot webflux <br>.   [![](https://visitcount.itsvg.in/api?id=sagar-kale&label=Profile%20Views&pretty=false)](https://visitcount.itsvg.in)
 
 
 ## 🌐 Socials:
