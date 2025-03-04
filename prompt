@@ -1,0 +1,78 @@
+I need you to generate a complete, production-ready Spring Boot solution for an analytics processing system with the following requirements and design details. The solution must be fully integrated and modular, meeting all the following specifications:
+
+1. **Data & Context:**
+   - We have 30,000 instruments stored in Elasticsearch.
+   - The system processes these instruments by calling a third-party analytics API to enrich data and then sends the enriched data to a downstream API using REST (via a Feign Client).
+   - The enriched analytics data is also saved to Elasticsearch for auditing purposes.
+
+2. **Source & Product Flexibility:**
+   - The system must support dynamic analytics source switching. Today, it may be "SourceA", but in the future, it could be "SourceB". This switching should be configurable (using YAML) and plug-and-play, without changing the core logic (fetching, validation, sending, and saving).
+   - Different product types (e.g., Fixed Income (FI), Equity (EQ), Hedge Funds (HF)) have distinct analytics:
+     - FI: Includes attributes like yield to maturity (YTM), yield to call (YTC), duration, credit rating breakdown, and sector look-through.
+     - EQ: Includes dividend yield, asset class breakdown, and exposure breakdown.
+     - HF: Includes strategy breakdown.
+   - The extraction of product-specific attributes must be decoupled. Each attribute extractor should be an independent component (using a chain-of-responsibility approach) grouped under each product category. This way, if new attributes (like “sector look-through” for FI or “exposure breakdown” for EQ) are added, you only add new extractor implementations without modifying existing code.
+
+3. **Model Generation & Mapping:**
+   - OpenAPI schema files (stored in `src/main/resources/api-schemas/`) will be used to auto-generate API-specific models (e.g., SourceAResponse, SourceBResponse) using OpenAPI Generator at build time.
+   - Use MapStruct to map API-specific request/response objects to a common model. The common request should include fields such as ISIN and FIGI ID, and the common response is a unified `CommonAnalytics` model.
+
+4. **Processing & Batch Handling:**
+   - The analytics API accepts bulk requests of ISINs and FIGI IDs. Use Apache Commons Collections to partition the request lists into batches (the batch size is configurable per source via YAML).
+   - Implement parallel processing using Java parallel streams (and optionally Reactor’s Mono/Flux for non-blocking asynchronous processing) to improve performance.
+
+5. **Resilience, Caching, and Asynchronous API Calls:**
+   - Use Spring’s WebClient for non-blocking asynchronous calls.
+   - Integrate Resilience4j (retry and circuit breaker) for fault tolerance.
+   - Incorporate caching (e.g., using Caffeine via Spring Cache) to avoid redundant API calls.
+
+6. **Validation:**
+   - Use Java 17’s Jakarta Bean Validation (javax.validation API) to validate the response objects. Use a centrally managed Validator instance to enforce annotations like @NotNull and @NotEmpty on the common model.
+
+7. **Downstream Communication and Auditing:**
+   - After processing and validation, the enriched analytics data should be sent to a downstream API using a Feign Client.
+   - Once sent, the data should also be saved to Elasticsearch for auditing.
+
+8. **Design Patterns to Employ:**
+   - **Strategy Pattern:** For dynamic analytics source selection.
+   - **Factory Pattern:** To choose the correct analytics source (e.g., SourceAAnalytics, SourceBAnalytics) and product-specific provider.
+   - **Template Method Pattern:** For the standardized processing flow (fetch → extract → validate → send → audit).
+   - **Chain of Responsibility Pattern:** For independent extraction of product-specific attributes (each extractor handles one attribute), organized by product category (FI, EQ, HF).
+   - **Builder Pattern:** For constructing immutable CommonAnalytics objects.
+   - **Proxy Pattern:** The Feign Client acts as a proxy for the downstream API.
+   - **Singleton Pattern:** For configuration and the Validator instance.
+   - **Parallel & Reactive Patterns:** To enable non-blocking and concurrent processing (using parallel streams and Reactor’s Mono/Flux).
+
+9. **Components to Implement:**
+   - **Configuration:**
+     - `application.yml` defining endpoints, timeouts, batch sizes, etc.
+     - A configuration bean (`AnalyticsConfig`) that loads these properties.
+   - **Common Models:**
+     - `CommonAnalytics` (with validation annotations).
+     - `AnalyticsRequest` (with ISIN and FIGI ID lists).
+   - **OpenAPI & Mapping:**
+     - Auto-generated API models from OpenAPI schemas.
+     - A MapStruct mapper (`AnalyticsMapper`) to map between API-specific objects and common models.
+   - **Resilient Async Client:**
+     - A `WebClient` bean and an `AsyncResilientApiClient` that uses Resilience4j and caching.
+   - **Analytics Source Abstraction:**
+     - An `AnalyticsSource` interface with implementations (e.g., `SourceAAnalytics`, `SourceBAnalytics`).
+     - An `AnalyticsSourceFactory` to dynamically select the source.
+   - **Product-Specific Providers and Extractors:**
+     - A `ProductAnalyticsProvider` interface with implementations for FI, Equity, and HF (e.g., `FIAnalyticsProvider`, `EquityAnalyticsProvider`, `HFAnalyticsProvider`).
+     - Each provider groups its attribute extractors (which implement an `AnalyticsAttributeExtractor` interface). Use qualifiers or grouping annotations so that FI extractors (like CreditRatingBreakdownExtractor, FixedIncomeYieldExtractor, SectorLookThroughExtractor) are grouped together, and similarly for Equity and HF.
+     - A factory (`ProductAnalyticsProviderFactory`) to choose the right provider based on product type.
+   - **Processing Service:**
+     - An `AnalyticsProcessingService` that:
+       - Splits incoming bulk requests into batches.
+       - Uses parallel streams to process batches.
+       - Fetches data using the selected analytics source.
+       - Delegates to the appropriate product-specific provider to extract attributes.
+       - Validates the final `CommonAnalytics` object using Jakarta Validator.
+       - Sends the data to the next API via a Feign Client and saves it in Elasticsearch.
+   - **REST Controller:**
+     - A controller (`AnalyticsController`) exposing an endpoint (e.g., POST `/analytics/{source}/{productType}`) to trigger processing.
+
+Please generate the full solution with all necessary code samples, configurations, and explanations. The output should be organized in sections (Configuration, Models, Client, Sources, Providers/Extractors, Processing Service, Controller, etc.) and include a final summary of the design patterns used.
+
+The generated solution must be comprehensive, self-contained, and ready for a Spring Boot project.
